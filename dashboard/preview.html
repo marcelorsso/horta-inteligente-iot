@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Horta Inteligente</title>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Segoe UI", sans-serif;
+}
+
+body {
+  background: linear-gradient(135deg, #071b11, #0e2d1c);
+  color: white;
+  min-height: 100vh;
+  padding: 30px;
+}
+
+.topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.titulo {
+  font-size: 38px;
+  font-weight: bold;
+}
+
+.status {
+  padding: 10px 18px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.1);
+  backdrop-filter: blur(10px);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin-bottom: 25px;
+}
+
+.card {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 24px;
+  padding: 25px;
+  backdrop-filter: blur(15px);
+  transition: 0.25s;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+}
+
+.card h2 {
+  font-size: 16px;
+  opacity: 0.7;
+  margin-bottom: 12px;
+}
+
+.valor {
+  font-size: 42px;
+  font-weight: bold;
+}
+
+.sub {
+  margin-top: 8px;
+  opacity: 0.7;
+}
+
+.graficos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 25px;
+}
+
+.grafico-card {
+  background: rgba(255,255,255,0.08);
+  border-radius: 24px;
+  padding: 20px;
+  height: 420px;
+}
+
+.irrigacao {
+  font-weight: bold;
+  color: #4cff8f;
+}
+
+.alerta {
+  animation: piscar 1s infinite;
+  box-shadow: 0 0 20px rgba(255,0,0,0.5);
+}
+
+.alerta-texto {
+  color: #ff6b6b !important;
+}
+
+.online {
+  color: #4cff8f;
+}
+
+.offline {
+  color: #ff5e5e;
+}
+
+.historico {
+  margin-top: 25px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 24px;
+  padding: 20px;
+  backdrop-filter: blur(15px);
+}
+
+.log-item {
+  background: rgba(255,255,255,0.05);
+  padding: 12px;
+  border-radius: 12px;
+  margin-top: 10px;
+  border-left: 4px solid #4cff8f;
+}
+
+.botao-regar {
+  background: linear-gradient(135deg, #00c853, #00e676);
+  border: none;
+  color: white;
+  padding: 16px 26px;
+  font-size: 18px;
+  font-weight: bold;
+  border-radius: 18px;
+  cursor: pointer;
+  transition: 0.2s;
+  box-shadow: 0 10px 25px rgba(0,200,83,0.3);
+}
+
+.botao-regar:hover {
+  transform: translateY(-3px);
+}
+
+@keyframes piscar {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+@media(max-width:1000px) {
+  .graficos {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="topo">
+  <div class="titulo">🌱 Horta Inteligente</div>
+  <div class="status">
+    <span id="statusFirebase">Firebase Online</span>
+  </div>
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>Temperatura</h2>
+    <div class="valor" id="temperatura">--</div>
+    <div class="sub">°C</div>
+  </div>
+
+  <div class="card">
+    <h2>Umidade do Ar</h2>
+    <div class="valor" id="umidadeAr">--</div>
+    <div class="sub">%</div>
+  </div>
+
+  <div class="card">
+    <h2>Umidade do Solo</h2>
+    <div class="valor" id="solo">--</div>
+    <div class="sub">%</div>
+  </div>
+
+  <div class="card">
+    <h2>Luminosidade</h2>
+    <div class="valor" id="luminosidade">--</div>
+    <div class="sub">LDR</div>
+  </div>
+
+  <div class="card">
+    <h2>Status Irrigação</h2>
+    <div class="valor irrigacao" id="irrigacao">--</div>
+    <div class="sub">Sistema automático</div>
+  </div>
+
+</div>
+
+<div style="margin-bottom:25px;">
+  <button onclick="regarManual()" class="botao-regar">💧 Regar Manualmente</button>
+</div>
+
+<div class="graficos">
+
+  <div class="grafico-card">
+    <h2>Temperatura</h2>
+    <canvas id="graficoTemperatura"></canvas>
+  </div>
+
+  <div class="grafico-card">
+    <h2>Umidade do Ar</h2>
+    <canvas id="graficoUmidadeAr"></canvas>
+  </div>
+
+  <div class="grafico-card">
+    <h2>Umidade do Solo</h2>
+    <canvas id="graficoSolo"></canvas>
+  </div>
+
+  <div class="grafico-card">
+    <h2>Luminosidade</h2>
+    <canvas id="graficoLuminosidade"></canvas>
+  </div>
+
+</div>
+
+<div class="historico">
+  <h2>📚 Últimos Eventos</h2>
+  <div id="historicoEventos"></div>
+</div>
+
+<script>
+// =====================================
+// FIREBASE
+// =====================================
+
+const firebaseConfig = {
+  apiKey: "AIzaSyApCSYVEj5z3v2V9Qxk8KAzrH-YJt1V6Gc",
+  authDomain: "horta-inteligente-3e307.firebaseapp.com",
+  databaseURL: "https://horta-inteligente-3e307-default-rtdb.firebaseio.com",
+  projectId: "horta-inteligente-3e307",
+  storageBucket: "horta-inteligente-3e307.firebasestorage.app",
+  messagingSenderId: "269148346883",
+  appId: "1:269148346883:web:687e8829e5278361354c36"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// =====================================
+// ENDEREÇO DA ESP32
+// =====================================
+
+const ESP32_BASE_URL = "http://192.168.15.185";
+
+// =====================================
+// ELEMENTOS
+// =====================================
+
+const temperaturaEl = document.getElementById("temperatura");
+const umidadeArEl = document.getElementById("umidadeAr");
+const soloEl = document.getElementById("solo");
+const luminosidadeEl = document.getElementById("luminosidade");
+const irrigacaoEl = document.getElementById("irrigacao");
+const historicoEl = document.getElementById("historicoEventos");
+const statusFirebaseEl = document.getElementById("statusFirebase");
+
+// =====================================
+// DADOS DOS GRÁFICOS
+// =====================================
+
+const labels = [];
+const dadosTemperatura = [];
+const dadosUmidadeAr = [];
+const dadosSolo = [];
+const dadosLuminosidade = [];
+
+let ultimoPontoKey = "";
+
+// =====================================
+// GRÁFICOS
+// =====================================
+
+const graficoTemperatura = new Chart(
+  document.getElementById("graficoTemperatura").getContext("2d"),
+  {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Temperatura",
+        data: dadosTemperatura,
+        borderColor: "#4cff8f",
+        backgroundColor: "rgba(76,255,143,0.15)",
+        borderWidth: 3,
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  }
+);
+
+const graficoUmidadeAr = new Chart(
+  document.getElementById("graficoUmidadeAr").getContext("2d"),
+  {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Umidade do Ar",
+        data: dadosUmidadeAr,
+        borderColor: "#9ad8ff",
+        backgroundColor: "rgba(154,216,255,0.15)",
+        borderWidth: 3,
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  }
+);
+
+const graficoSolo = new Chart(
+  document.getElementById("graficoSolo").getContext("2d"),
+  {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Solo",
+        data: dadosSolo,
+        borderColor: "#00c3ff",
+        backgroundColor: "rgba(0,195,255,0.15)",
+        borderWidth: 3,
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  }
+);
+
+const graficoLuminosidade = new Chart(
+  document.getElementById("graficoLuminosidade").getContext("2d"),
+  {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Luminosidade",
+        data: dadosLuminosidade,
+        borderColor: "#ffd54f",
+        backgroundColor: "rgba(255,213,79,0.15)",
+        borderWidth: 3,
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  }
+);
+
+// =====================================
+// GRAVAÇÃO DOS PONTOS
+// =====================================
+
+function registrarPonto(dados) {
+  const key = [
+    dados.horario,
+    dados.temperatura,
+    dados.umidadeAr,
+    dados.umidadeSolo,
+    dados.luminosidade,
+    dados.statusIrrigacao
+  ].join("|");
+
+  if (key === ultimoPontoKey) return;
+  ultimoPontoKey = key;
+
+  const etiqueta = dados.horario || new Date().toLocaleTimeString();
+
+  labels.push(etiqueta);
+  dadosTemperatura.push(Number(dados.temperatura) || 0);
+  dadosUmidadeAr.push(Number(dados.umidadeAr) || 0);
+  dadosSolo.push(Number(dados.umidadeSolo) || 0);
+  dadosLuminosidade.push(Number(dados.luminosidade) || 0);
+
+  if (labels.length > 120) {
+    labels.shift();
+    dadosTemperatura.shift();
+    dadosUmidadeAr.shift();
+    dadosSolo.shift();
+    dadosLuminosidade.shift();
+  }
+
+  graficoTemperatura.update();
+  graficoUmidadeAr.update();
+  graficoSolo.update();
+  graficoLuminosidade.update();
+}
+
+// =====================================
+// ATUALIZA STATUS ATUAL
+// =====================================
+
+function atualizarDashboard(dados) {
+  if (!dados) return;
+
+  temperaturaEl.innerHTML = `${dados.temperatura}°`;
+  umidadeArEl.innerHTML = `${dados.umidadeAr}%`;
+  soloEl.innerHTML = `${dados.umidadeSolo}%`;
+  luminosidadeEl.innerHTML = `${dados.luminosidade}`;
+  irrigacaoEl.innerHTML = dados.statusIrrigacao || "--";
+
+  const cardSolo = document.getElementById("solo").parentElement;
+
+  if (Number(dados.umidadeSolo) < 50) {
+    cardSolo.classList.add("alerta");
+    soloEl.classList.add("alerta-texto");
+  } else {
+    cardSolo.classList.remove("alerta");
+    soloEl.classList.remove("alerta-texto");
+  }
+
+  if (dados.statusIrrigacao === "LIGADA") {
+    irrigacaoEl.style.color = "#4cff8f";
+    irrigacaoEl.innerHTML = "💧 IRRIGANDO";
+  } else {
+    irrigacaoEl.style.color = "white";
+  }
+
+  statusFirebaseEl.classList.add("online");
+  registrarPonto(dados);
+}
+
+async function buscarStatusAtual() {
+  try {
+    const snap = await db.ref("statusAtual").once("value");
+    const dados = snap.val();
+    atualizarDashboard(dados);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// Atualiza na mesma cadência do statusAtual do ESP32
+buscarStatusAtual();
+setInterval(buscarStatusAtual, 5000);
+
+// =====================================
+// HISTÓRICO
+// =====================================
+
+// =====================================
+// HISTÓRICO FIREBASE PERSISTENTE
+// =====================================
+
+db
+.ref("historico")
+.limitToLast(1000)
+.on("value", snapshot => {
+
+  const dados =
+    snapshot.val();
+
+  if (!dados) return;
+
+  // =====================================
+  // LIMPA ARRAYS
+  // =====================================
+
+  labels.length = 0;
+
+  dadosTemperatura.length = 0;
+
+  dadosUmidadeAr.length = 0;
+
+  dadosSolo.length = 0;
+
+  dadosLuminosidade.length = 0;
+
+  // =====================================
+  // LIMPA EVENTOS
+  // =====================================
+
+  historicoEl.innerHTML = "";
+
+  // =====================================
+  // CONVERTE OBJETOS
+  // =====================================
+
+  const eventos =
+    Object.values(dados);
+
+  // =====================================
+  // MONTA TUDO
+  // =====================================
+
+  eventos.forEach(evento => {
+
+    labels.push(
+      evento.horario
+    );
+
+    dadosTemperatura.push(
+      parseFloat(
+        evento.temperatura
+      ) || 0
+    );
+
+    dadosUmidadeAr.push(
+      parseFloat(
+        evento.umidadeAr
+      ) || 0
+    );
+
+    dadosSolo.push(
+      parseFloat(
+        evento.umidadeSolo
+      ) || 0
+    );
+
+    dadosLuminosidade.push(
+      parseFloat(
+        evento.luminosidade
+      ) || 0
+    );
+
+    // =====================================
+    // LOG VISUAL
+    // =====================================
+
+    const div =
+      document.createElement("div");
+
+    div.classList.add(
+      "log-item"
+    );
+
+    div.innerHTML = `
+
+      <strong>
+        ${evento.horario}
+      </strong>
+
+      <br>
+
+      🌡 Temperatura:
+      ${evento.temperatura}°C
+
+      <br>
+
+      💧 Umidade do ar:
+      ${evento.umidadeAr}%
+
+      <br>
+
+      🌱 Solo:
+      ${evento.umidadeSolo}%
+
+      <br>
+
+      💡 Luminosidade:
+      ${evento.luminosidade}
+
+      <br>
+
+      🚿 Irrigação:
+      ${evento.statusIrrigacao}
+
+    `;
+
+    historicoEl.prepend(div);
+  });
+
+  // =====================================
+  // ATUALIZA GRÁFICOS
+  // =====================================
+
+  graficoTemperatura.update();
+
+  graficoUmidadeAr.update();
+
+  graficoSolo.update();
+
+  graficoLuminosidade.update();
+});
+
+// =====================================
+// OFFLINE
+// =====================================
+
+window.addEventListener("offline", () => {
+  statusFirebaseEl.innerHTML = "Firebase Offline";
+  statusFirebaseEl.classList.remove("online");
+  statusFirebaseEl.classList.add("offline");
+});
+
+// =====================================
+// REGA MANUAL
+// =====================================
+
+function regarManual() {
+  const img = new Image();
+  img.src = `${ESP32_BASE_URL}/regar?t=${Date.now()}`;
+  alert("💧 Comando de rega enviado!");
+}
+</script>
+
+</body>
+</html>
